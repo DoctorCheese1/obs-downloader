@@ -23,9 +23,9 @@ function ask(question) {
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      shell: true,
       stdio: "inherit",
-      ...options
+      ...options,
+      shell: false
     });
 
     child.on("error", reject);
@@ -79,6 +79,8 @@ async function main() {
 
   console.log("");
   console.log("Downloading and converting audio...");
+  console.log("Note: conversion starts automatically after the download completes.");
+  console.log("Please wait for the final \"Done\" message before closing this window.");
   console.log("");
 
   try {
