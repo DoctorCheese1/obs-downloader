@@ -1,0 +1,12 @@
+{
+  "name": "obs-music-player",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local OBS music playlist player with folder scanning and downloader helper",
+  "scripts": {
+    "playlist": "node generate-playlist.mjs",
+    "download": "node download-song.mjs",
+    "start": "node generate-playlist.mjs"
+  }
+}

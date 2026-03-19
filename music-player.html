@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OBS Music Playlist Player</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: Arial, Helvetica, sans-serif;
+    color: white;
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  .app {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: linear-gradient(180deg, rgba(20,20,20,0.72), rgba(8,8,8,0.52));
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .header {
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: 1px;
+  }
+
+  .card {
+    background: rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 14px;
+  }
+
+  .label {
+    font-size: 12px;
+    opacity: 0.75;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+
+  .song-title {
+    font-size: 24px;
+    font-weight: 800;
+    word-break: break-word;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .time {
+    min-width: 52px;
+    text-align: center;
+    font-size: 14px;
+    opacity: 0.9;
+  }
+
+  .bar {
+    flex: 1;
+    height: 10px;
+    background: rgba(255,255,255,0.14);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    width: 0%;
+    height: 100%;
+    background: white;
+    border-radius: 999px;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  button {
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    background: white;
+    color: black;
+  }
+
+  .volume-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+
+  input[type="range"] {
+    width: 180px;
+  }
+
+  .playlist {
+    flex: 1;
+    overflow: auto;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 8px;
+  }
+
+  .track {
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-bottom: 6px;
+    background: rgba(255,255,255,0.04);
+  }
+
+  .track.active {
+    background: rgba(255,255,255,0.18);
+    font-weight: 800;
+  }
+
+  .footer {
+    font-size: 12px;
+    opacity: 0.72;
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">Music Playlist</div>
+
+    <div class="card">
+      <div class="label">Now Playing</div>
+      <div class="song-title" id="songName">Loading playlist...</div>
+    </div>
+
+    <div class="progress-row">
+      <div class="time" id="currentTime">0:00</div>
+      <div class="bar">
+        <div class="bar-fill" id="barFill"></div>
+      </div>
+      <div class="time" id="duration">0:00</div>
+    </div>
+
+    <div class="controls">
+      <button id="prevBtn">Prev</button>
+      <button id="playPauseBtn">Pause</button>
+      <button id="nextBtn">Next</button>
+
+      <div class="volume-box">
+        <span>Volume</span>
+        <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.6">
+      </div>
+    </div>
+
+    <div class="playlist" id="playlist"></div>
+
+    <div class="footer">Loaded from playlist.js • loops forever • smooth fade</div>
+  </div>
+
+  <audio id="audio"></audio>
+  <script src="playlist.js"></script>
+
+  <script>
+    const FADE_DURATION_MS = 2500;
+
+    const audio = document.getElementById("audio");
+    const songName = document.getElementById("songName");
+    const currentTimeEl = document.getElementById("currentTime");
+    const durationEl = document.getElementById("duration");
+    const barFill = document.getElementById("barFill");
+    const playlistEl = document.getElementById("playlist");
+    const playPauseBtn = document.getElementById("playPauseBtn");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const volumeSlider = document.getElementById("volumeSlider");
+
+    let tracks = Array.isArray(window.PLAYLIST) ? window.PLAYLIST : [];
+    let currentTrackIndex = 0;
+    let userVolume = parseFloat(volumeSlider.value);
+    let isTransitioning = false;
+    let fadeTimer = null;
+
+    function formatTime(seconds) {
+      if (!isFinite(seconds) || isNaN(seconds)) return "0:00";
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60).toString().padStart(2, "0");
+      return `${mins}:${secs}`;
+    }
+
+    function renderPlaylist() {
+      playlistEl.innerHTML = "";
+      tracks.forEach((track, index) => {
+        const item = document.createElement("div");
+        item.className = "track" + (index === currentTrackIndex ? " active" : "");
+        item.textContent = `${index + 1}. ${track.title}`;
+        item.onclick = () => transitionToTrack(index);
+        playlistEl.appendChild(item);
+      });
+    }
+
+    function updateNowPlaying() {
+      if (!tracks.length) {
+        songName.textContent = "No songs found";
+        return;
+      }
+      songName.textContent = tracks[currentTrackIndex].title;
+      renderPlaylist();
+    }
+
+    function loadTrack(index) {
+      currentTrackIndex = index;
+      audio.src = tracks[index].file;
+      audio.load();
+      updateNowPlaying();
+    }
+
+    function setButtonState() {
+      playPauseBtn.textContent = audio.paused ? "Play" : "Pause";
+    }
+
+    function wait(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function fadeOut() {
+      const startVolume = audio.volume;
+      const steps = Math.max(1, Math.floor(FADE_DURATION_MS / 50));
+      for (let i = 0; i < steps; i++) {
+        audio.volume = Math.max(0, startVolume * (1 - (i + 1) / steps));
+        await wait(50);
+      }
+      audio.volume = 0;
+    }
+
+    async function fadeIn() {
+      const steps = Math.max(1, Math.floor(FADE_DURATION_MS / 50));
+      for (let i = 0; i < steps; i++) {
+        audio.volume = userVolume * ((i + 1) / steps);
+        await wait(50);
+      }
+      audio.volume = userVolume;
+    }
+
+    function nextIndex() {
+      return (currentTrackIndex + 1) % tracks.length;
+    }
+
+    function prevIndex() {
+      return (currentTrackIndex - 1 + tracks.length) % tracks.length;
+    }
+
+    async function transitionToTrack(index) {
+      if (!tracks.length || isTransitioning) return;
+      isTransitioning = true;
+
+      try {
+        if (!audio.paused) {
+          await fadeOut();
+        }
+
+        audio.pause();
+        loadTrack(index);
+        audio.volume = 0;
+        await audio.play();
+        await fadeIn();
+      } catch (err) {
+        console.error(err);
+      } finally {
+        audio.volume = userVolume;
+        isTransitioning = false;
+        setButtonState();
+      }
+    }
+
+    function startFadeWatcher() {
+      if (fadeTimer) clearInterval(fadeTimer);
+
+      fadeTimer = setInterval(() => {
+        if (!tracks.length || audio.paused || isTransitioning) return;
+        if (!isFinite(audio.duration) || audio.duration <= 0) return;
+
+        const remaining = audio.duration - audio.currentTime;
+        if (remaining <= FADE_DURATION_MS / 1000) {
+          transitionToTrack(nextIndex());
+        }
+      }, 100);
+    }
+
+    volumeSlider.addEventListener("input", () => {
+      userVolume = parseFloat(volumeSlider.value);
+      if (!isTransitioning) audio.volume = userVolume;
+    });
+
+    playPauseBtn.addEventListener("click", async () => {
+      if (!tracks.length || isTransitioning) return;
+      if (audio.paused) {
+        audio.volume = userVolume;
+        await audio.play();
+      } else {
+        audio.pause();
+      }
+      setButtonState();
+    });
+
+    prevBtn.addEventListener("click", () => transitionToTrack(prevIndex()));
+    nextBtn.addEventListener("click", () => transitionToTrack(nextIndex()));
+
+    audio.addEventListener("loadedmetadata", () => {
+      durationEl.textContent = formatTime(audio.duration);
+    });
+
+    audio.addEventListener("timeupdate", () => {
+      currentTimeEl.textContent = formatTime(audio.currentTime);
+      const percent = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
+      barFill.style.width = percent + "%";
+    });
+
+    audio.addEventListener("ended", () => {
+      if (!isTransitioning) transitionToTrack(nextIndex());
+    });
+
+    audio.addEventListener("pause", setButtonState);
+    audio.addEventListener("play", setButtonState);
+
+    if (!tracks.length) {
+      songName.textContent = "No songs found";
+      playPauseBtn.disabled = true;
+      prevBtn.disabled = true;
+      nextBtn.disabled = true;
+    } else {
+      loadTrack(0);
+      audio.volume = userVolume;
+      audio.play().catch(console.error);
+      startFadeWatcher();
+    }
+  </script>
+</body>
+</html>
