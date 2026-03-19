@@ -23,9 +23,9 @@ function ask(question) {
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      shell: true,
       stdio: "inherit",
-      ...options
+      ...options,
+      shell: false
     });
 
     child.on("error", reject);
