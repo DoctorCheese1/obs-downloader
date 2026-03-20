@@ -44,17 +44,47 @@ function sanitizeBaseName(name) {
     .slice(0, 180);
 }
 
+function normalizeMediaUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+
+    // Playlist context params are optional for single-track downloads and
+    // can cause command-line issues in shell-based environments.
+    parsed.searchParams.delete("list");
+    parsed.searchParams.delete("index");
+    parsed.searchParams.delete("pp");
+    parsed.searchParams.delete("si");
+
+    // Keep only the video id for /watch URLs.
+    if (parsed.hostname.includes("youtube.com") && parsed.pathname === "/watch") {
+      const videoId = parsed.searchParams.get("v");
+      if (!videoId) return rawUrl;
+
+      parsed.search = "";
+      parsed.searchParams.set("v", videoId);
+    }
+
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
 async function main() {
   console.log("OBS Music Downloader");
   console.log("--------------------");
   console.log("Paste a supported URL you are allowed to use.");
   console.log("");
 
-  const url = await ask("URL: ");
-  if (!url) {
+  const urlInput = await ask("URL: ");
+  if (!urlInput) {
     console.log("No URL entered.");
     rl.close();
     process.exit(0);
+  }
+  const url = normalizeMediaUrl(urlInput);
+  if (url !== urlInput) {
+    console.log("Detected extra URL parameters; using cleaned single-track URL.");
   }
 
   const customName = await ask("Custom file name (optional): ");
