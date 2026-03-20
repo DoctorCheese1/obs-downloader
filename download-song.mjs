@@ -24,8 +24,7 @@ function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",
-      ...options,
-      shell: false
+      ...options
     });
 
     child.on("error", reject);
